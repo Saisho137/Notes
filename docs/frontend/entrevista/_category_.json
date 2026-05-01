@@ -1,0 +1,9 @@
+{
+  "label": "🎯 Entrevista Técnica",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "slug": "/frontend/entrevista",
+    "description": "Preguntas y recursos para entrevistas técnicas de desarrollo frontend."
+  }
+}

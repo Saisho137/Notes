@@ -1,0 +1,8 @@
+{
+  "label": "🔐 Criptografía",
+  "position": 3,
+  "link": {
+    "type": "doc",
+    "id": "criptografia/README"
+  }
+}

@@ -1,0 +1,99 @@
+/* Notas Técnicas — Custom Docusaurus Theme (Indigo/Violet) */
+
+:root {
+  --ifm-color-primary: #5b21b6;
+  --ifm-color-primary-dark: #4c1d95;
+  --ifm-color-primary-darker: #3b1380;
+  --ifm-color-primary-darkest: #2e0f63;
+  --ifm-color-primary-light: #6d28d9;
+  --ifm-color-primary-lighter: #7c3aed;
+  --ifm-color-primary-lightest: #8b5cf6;
+  --ifm-code-font-size: 93%;
+  --docusaurus-highlighted-code-line-bg: rgba(109, 40, 217, 0.12);
+  --notes-dark: #1e1b4b;
+  --notes-violet: #7c3aed;
+  --notes-indigo: #4f46e5;
+  --notes-light-bg: #faf9ff;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #a78bfa;
+  --ifm-color-primary-dark: #8b5cf6;
+  --ifm-color-primary-darker: #7c3aed;
+  --ifm-color-primary-darkest: #6d28d9;
+  --ifm-color-primary-light: #c4b5fd;
+  --ifm-color-primary-lighter: #ddd6fe;
+  --ifm-color-primary-lightest: #ede9fe;
+  --docusaurus-highlighted-code-line-bg: rgba(167, 139, 250, 0.2);
+  --notes-light-bg: #13111e;
+}
+
+/* Navbar */
+.navbar {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] .navbar {
+  background-color: #1b1b2e;
+  border-bottom: 1px solid #2a2a45;
+}
+
+/* Table improvements */
+table {
+  display: table;
+  width: 100%;
+}
+
+th {
+  background-color: rgba(109, 40, 217, 0.08);
+}
+
+[data-theme='dark'] th {
+  background-color: rgba(167, 139, 250, 0.12);
+}
+
+/* Code blocks */
+.prism-code {
+  border-radius: 6px;
+}
+
+/* TOC active item */
+.table-of-contents__link--active {
+  color: var(--notes-violet) !important;
+  font-weight: 600;
+}
+
+/* Sidebar active item */
+.menu__link--active {
+  border-left: 3px solid var(--notes-violet);
+}
+
+/* Footer */
+.footer {
+  background-color: var(--notes-dark);
+}
+
+/* Blockquote */
+blockquote {
+  border-left: 4px solid var(--notes-violet);
+  background: rgba(109, 40, 217, 0.05);
+  border-radius: 0 6px 6px 0;
+}
+
+[data-theme='dark'] blockquote {
+  background: rgba(167, 139, 250, 0.08);
+}
+
+/* Pagination */
+.pagination-nav__link {
+  border-color: rgba(109, 40, 217, 0.3);
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--notes-violet);
+}
+
+/* Admonition customization */
+.alert--tip {
+  border-left-color: var(--notes-violet);
+}
