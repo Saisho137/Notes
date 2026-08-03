@@ -282,7 +282,35 @@ Microsegmentación Zero Trust:
 
 ## 4. Vulnerabilidades y Debilidades
 
-### 4.1 ¿Qué son las Vulnerabilidades?
+### 4.1 Vulnerabilidad, Amenaza y Riesgo: tres palabras que no son sinónimos
+
+Antes de hablar de hallazgos, escaneos o remediación es necesario separar tres conceptos que suelen usarse indistintamente. Distinguirlos es lo que permite **priorizar** en lugar de reaccionar ante cualquier alerta.
+
+|                           | **Vulnerabilidad**                                                | **Amenaza**                                                            | **Riesgo**                                                                                  |
+| ------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Pregunta que responde** | ¿Qué falla existe?                                                | ¿Quién la explotaría?                                                  | ¿Qué tan grave sería?                                                                       |
+| **Definición**            | Una debilidad concreta en el código, la configuración o el diseño | Un actor o evento capaz de aprovechar esa falla                        | La probabilidad de que la amenaza explote la vulnerabilidad, por el impacto para el negocio |
+| **Naturaleza**            | Técnica e interna: existe en tu sistema                           | Externa (o interna): existe independientemente de ti                   | Derivada: se calcula, no se observa                                                         |
+| **Cómo se mide**          | Presencia/ausencia; severidad técnica (CVSS)                      | Capacidad, motivación, oportunidad; probabilidad de explotación (EPSS) | `Riesgo ≈ Probabilidad × Impacto`                                                           |
+| **Ejemplo**               | Un endpoint que confía en el `userId` enviado por el cliente      | Un usuario autenticado que manipula ese parámetro (IDOR)               | Exposición de datos de todos los clientes → sanción regulatoria                             |
+
+**Relación entre los tres**:
+
+```text
+Vulnerabilidad  +  Amenaza  ──►  Riesgo
+   (debilidad)     (actor)       (probabilidad × impacto)
+
+Sin amenaza creíble  ──► la vulnerabilidad existe, pero el riesgo es bajo
+Sin vulnerabilidad   ──► la amenaza existe, pero no tiene por dónde entrar
+```
+
+**Por qué importa en la práctica**:
+
+- Una vulnerabilidad CRITICAL en una librería que nunca se ejecuta representa un **riesgo** menor que una MEDIUM en un endpoint público sin autenticación (ver [5.6 Reachability Analysis](#56-reachability-analysis)).
+- Las métricas cubren dimensiones distintas: **CVSS** describe la vulnerabilidad, **EPSS** aproxima la amenaza, y el **contexto de negocio** define el impacto. La priorización real combina las tres.
+- El **modelado de amenazas** (sección [3.4](#34-secure-by-design-seguro-por-diseño)) parte de las amenazas para descubrir vulnerabilidades; el **escaneo** (sección [7.4](#74-dónde-comprobamos-riesgos-capas-de-escaneo)) parte de las vulnerabilidades para estimar riesgo. Ambos enfoques son complementarios.
+
+### 4.2 ¿Qué son las Vulnerabilidades?
 
 Una vulnerabilidad es una debilidad en un sistema que puede ser explotada por un atacante para realizar acciones no autorizadas dentro del sistema. Las vulnerabilidades pueden existir en:
 
@@ -291,7 +319,7 @@ Una vulnerabilidad es una debilidad en un sistema que puede ser explotada por un
 - Procesos de negocio
 - Controles internos
 
-### 4.2 Tipos Comunes de Vulnerabilidades
+### 4.3 Tipos Comunes de Vulnerabilidades
 
 #### Vulnerabilidades de Aplicación Web (OWASP Top 10)
 
@@ -304,7 +332,7 @@ Resumen de alto nivel. Para el detalle actualizado y medidas de prevención, ver
 - Falta de actualizaciones de seguridad
 - Credenciales débiles
 
-### 4.3 Ciclo de Vida de una Vulnerabilidad
+### 4.4 Ciclo de Vida de una Vulnerabilidad
 
 ```mermaid
 graph TD
@@ -424,6 +452,45 @@ Cada CNA tiene un **scope** (ámbito) definido que especifica qué vulnerabilida
 - **CWE-89**: SQL Injection
 - **CWE-200**: Exposure of Sensitive Information
 - **CWE-787**: Out-of-bounds Write
+
+#### 5.2.1 Relación entre OWASP, CWE y el código
+
+CWE es el nivel de detalle técnico que hay **detrás** de cada categoría de OWASP. Son capas de un mismo hallazgo, no clasificaciones que compitan:
+
+```text
+OWASP (categoría de riesgo)   →   CWE (defecto técnico)   →   El código (dónde aparece)
+     concepto, lenguaje              identificador exacto,        la línea concreta
+     común de negocio                mismo número en                que hay que corregir
+                                     cualquier lenguaje
+```
+
+| Capa             | Qué es                                                                     | Ejemplo                                                                      |
+| ---------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **OWASP**        | Categoría de riesgo, el tipo de riesgo a nivel conceptual                  | `A05 – Injection`                                                            |
+| **CWE**          | El defecto técnico exacto; el mismo número en cualquier lenguaje del mundo | `CWE-89 – SQL Injection`                                                     |
+| **En el código** | Dónde aparece realmente                                                    | Una entrada no confiable que llega a una consulta sin sanear ni parametrizar |
+
+**Relación N:N**: una categoría OWASP agrupa decenas de CWEs (A05:2025 Injection mapea CWE-89, CWE-79, CWE-77, CWE-78...), y un mismo CWE puede aparecer bajo más de una categoría según el contexto. OWASP publica el mapeo oficial de CWEs por categoría en cada edición del Top 10.
+
+**Ejemplos de hallazgos reales y su lectura en tres capas**:
+
+| Categoría OWASP                      | CWE                        | Hallazgo concreto                                                                                                      |
+| ------------------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| A05 – Injection                      | CWE-89                     | Una validación insuficiente permitía que un parámetro llegara a una consulta sin estar correctamente parametrizado     |
+| A03 – Software Supply Chain Failures | CWE-1104, CWE-937, CWE-829 | Dependencias desactualizadas y un checksum faltante en el Gradle Wrapper, que expone a ataques de cadena de suministro |
+| A01 – Broken Access Control          | CWE-639 (IDOR)             | Endpoints que confiaban en un identificador enviado por el cliente sin validar que fuera del usuario autenticado       |
+| A04 – Cryptographic Failures         | CWE-327, CWE-326           | Un endpoint que todavía aceptaba cifradores obsoletos                                                                  |
+
+**Referencia de los CWEs citados**:
+
+- **CWE-639**: Authorization Bypass Through User-Controlled Key (IDOR — Insecure Direct Object Reference)
+- **CWE-829**: Inclusion of Functionality from Untrusted Control Sphere
+- **CWE-937**: Using Components with Known Vulnerabilities (vista OWASP)
+- **CWE-1104**: Use of Unmaintained Third Party Components
+- **CWE-326**: Inadequate Encryption Strength
+- **CWE-327**: Use of a Broken or Risky Cryptographic Algorithm
+
+> **La lectura es siempre la misma**: identificar la categoría OWASP (para comunicar el riesgo), el CWE específico (para entender el patrón del defecto) y corregir la **causa raíz** en el código, no solo el síntoma que hizo fallar el escaneo. Corregir el CWE evita que el mismo patrón reaparezca en otro endpoint u otro proyecto.
 
 ### 5.3 CVSS (Common Vulnerability Scoring System)
 
@@ -549,9 +616,9 @@ Prioridad de Remediación = f(Severidad CVSS, Probabilidad EPSS, Reachability, C
 **Interpretación de scores EPSS**:
 
 - **Score**: Probabilidad de explotación en próximos 30 días (0.0 a 1.0)
-  - Ejemplo: EPSS = 0.73 → 73% de probabilidad de ser explotada en los próximos 30 días
+    - Ejemplo: EPSS = 0.73 → 73% de probabilidad de ser explotada en los próximos 30 días
 - **Percentile**: Posición relativa respecto a todas las vulnerabilidades
-  - Ejemplo: Percentile = 0.95 → Está en el top 5% de vulnerabilidades más probables de ser explotadas
+    - Ejemplo: Percentile = 0.95 → Está en el top 5% de vulnerabilidades más probables de ser explotadas
 
 **Umbrales organizacionales**: Cada organización debe definir sus propios umbrales basándose en tolerancia al riesgo, recursos disponibles y contexto de negocio.
 
@@ -749,9 +816,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "express": "^4.18.2"
-  }
+	"dependencies": {
+		"express": "^4.18.2"
+	}
 }
 ```
 
@@ -772,9 +839,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "lodash": "~4.17.21"
-  }
+	"dependencies": {
+		"lodash": "~4.17.21"
+	}
 }
 ```
 
@@ -793,9 +860,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "react": "18.2.0"
-  }
+	"dependencies": {
+		"react": "18.2.0"
+	}
 }
 ```
 
@@ -807,9 +874,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "moment": ">2.24.0"
-  }
+	"dependencies": {
+		"moment": ">2.24.0"
+	}
 }
 ```
 
@@ -817,9 +884,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "axios": ">=0.21.0"
-  }
+	"dependencies": {
+		"axios": ">=0.21.0"
+	}
 }
 ```
 
@@ -827,9 +894,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "jquery": "3.6.x"
-  }
+	"dependencies": {
+		"jquery": "3.6.x"
+	}
 }
 ```
 
@@ -837,9 +904,9 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "vue": ">=3.0.0 <4.0.0"
-  }
+	"dependencies": {
+		"vue": ">=3.0.0 <4.0.0"
+	}
 }
 ```
 
@@ -859,10 +926,10 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "express": "4.18.2",
-    "lodash": "4.17.21"
-  }
+	"dependencies": {
+		"express": "4.18.2",
+		"lodash": "4.17.21"
+	}
 }
 ```
 
@@ -873,10 +940,10 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "express": "~4.18.2",
-    "lodash": "~4.17.21"
-  }
+	"dependencies": {
+		"express": "~4.18.2",
+		"lodash": "~4.17.21"
+	}
 }
 ```
 
@@ -887,10 +954,10 @@ El dependency pinning es la práctica de especificar versiones exactas de depend
 
 ```json
 {
-  "dependencies": {
-    "express": "^4.18.2",
-    "lodash": "^4.17.21"
-  }
+	"dependencies": {
+		"express": "^4.18.2",
+		"lodash": "^4.17.21"
+	}
 }
 ```
 
@@ -930,9 +997,9 @@ yarn audit --verbose
 - **Pinning:** mayor reproducibilidad, mayor overhead de mantenimiento.
 - **Ranges (caret/tilde):** permiten actualizaciones automáticas que respetan SemVer.
 - **Overrides / resolutions:** fuerzan versiones específicas para sub-dependencias. Úsalos **solo como parche temporal** cuando:
-  - existe un CVE en una sub-dependencia sin fix upstream;
-  - no puedes esperar a que el maintainer publique fix;
-  - documentas y programas eliminar el override cuando haya solución upstream.
+    - existe un CVE en una sub-dependencia sin fix upstream;
+    - no puedes esperar a que el maintainer publique fix;
+    - documentas y programas eliminar el override cuando haya solución upstream.
 
 **Recomendación:** nunca usar overrides como política permanente; siempre abrir issues/PRs upstream y, si es crítico, considerar backport o fork con un plan de mantenimiento.
 
@@ -947,27 +1014,27 @@ yarn audit --verbose
 ```javascript
 // ❌ Malo: Sin validación
 app.post("/user", (req, res) => {
-  const user = new User(req.body);
-  user.save();
+	const user = new User(req.body);
+	user.save();
 });
 
 // ✅ Bueno: Con validación
 const Joi = require("joi");
 
 const userSchema = Joi.object({
-  email: Joi.string().email().required(),
-  age: Joi.number().integer().min(0).max(120),
-  name: Joi.string()
-    .pattern(/^[a-zA-Z\s]+$/)
-    .max(100),
+	email: Joi.string().email().required(),
+	age: Joi.number().integer().min(0).max(120),
+	name: Joi.string()
+		.pattern(/^[a-zA-Z\s]+$/)
+		.max(100),
 });
 
 app.post("/user", (req, res) => {
-  const { error, value } = userSchema.validate(req.body);
-  if (error) {
-    return res.status(400).json({ error: error.details[0].message });
-  }
-  // Procesar datos validados...
+	const { error, value } = userSchema.validate(req.body);
+	if (error) {
+		return res.status(400).json({ error: error.details[0].message });
+	}
+	// Procesar datos validados...
 });
 ```
 
@@ -1005,7 +1072,7 @@ const user = await User.findOne({ email: email });
 
 // Validar variables críticas al inicio
 if (!process.env.JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is required");
+	throw new Error("JWT_SECRET environment variable is required");
 }
 ```
 
@@ -1015,21 +1082,21 @@ if (!process.env.JWT_SECRET) {
 const helmet = require("helmet");
 
 app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "https:"],
-      },
-    },
-    hsts: {
-      maxAge: 31536000,
-      includeSubDomains: true,
-      preload: true,
-    },
-  }),
+	helmet({
+		contentSecurityPolicy: {
+			directives: {
+				defaultSrc: ["'self'"],
+				styleSrc: ["'self'", "'unsafe-inline'"],
+				scriptSrc: ["'self'"],
+				imgSrc: ["'self'", "data:", "https:"],
+			},
+		},
+		hsts: {
+			maxAge: 31536000,
+			includeSubDomains: true,
+			preload: true,
+		},
+	}),
 );
 ```
 
@@ -1038,18 +1105,117 @@ app.use(
 ```javascript
 // ❌ Nunca loguear información sensible
 logger.info(`User login attempt`, {
-  userId: user.id,
-  ip: req.ip,
-  // password: req.body.password // ¡NUNCA!
+	userId: user.id,
+	ip: req.ip,
+	// password: req.body.password // ¡NUNCA!
 });
 
 // ✅ Eventos de seguridad importantes
 logger.warn("Failed login attempt", {
-  ip: req.ip,
-  userAgent: req.get("User-Agent"),
-  timestamp: new Date().toISOString(),
+	ip: req.ip,
+	userAgent: req.get("User-Agent"),
+	timestamp: new Date().toISOString(),
 });
 ```
+
+### 7.4 Dónde comprobamos riesgos: capas de escaneo
+
+Ninguna herramienta cubre toda la superficie de ataque. Cada tipo de escaneo mira una capa distinta del sistema, y las vulnerabilidades que encuentra una son invisibles para las otras. Una estrategia completa combina las cuatro:
+
+| Capa                        | Técnica                                       | Qué revisa                                                     | Ejemplos de hallazgo                                                           |
+| --------------------------- | --------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Código**                  | **SAST** (análisis estático)                  | El código fuente **sin ejecutarlo**                            | SQL sin parametrizar, validaciones ausentes, secretos hardcodeados             |
+| **Dependencias**            | **SCA** (análisis de composición de software) | Librerías de terceros y sus transitivas                        | Versiones con CVEs conocidos, componentes sin mantenimiento                    |
+| **Imágenes y contenedores** | Escaneo de imágenes                           | La imagen base de Docker y el sistema operativo que la compone | Paquetes del SO desactualizados, imágenes base con CVEs                        |
+| **Aplicación en ejecución** | **DAST** (análisis dinámico)                  | La aplicación **corriendo**, como lo haría un atacante real    | Headers de seguridad ausentes, control de acceso roto, inyecciones explotables |
+
+**Alcance del SCA por ecosistema**:
+
+- **Backend JVM**: librerías declaradas en Maven (`pom.xml`) y Gradle (`build.gradle`, `gradle.lockfile`)
+- **Go**: módulos declarados en `go.mod` / `go.sum`
+- **Frontend**: `package.json` **y su lockfile** (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) — el lockfile es lo que refleja el árbol real de dependencias transitivas, no el manifiesto
+- **Contenedores**: el manifiesto de paquetes del sistema operativo dentro de la imagen
+
+> **Regla práctica**: escanear solo el manifiesto (`package.json`) y no el lockfile deja fuera las dependencias transitivas, que es donde vive la mayoría de las vulnerabilidades de la cadena de suministro. Ver [sección 6 Gestión de Dependencias](#6-gestión-de-dependencias) y [A03:2025 Software Supply Chain Failures](#a032025--software-supply-chain-failures).
+
+Para el catálogo de herramientas concretas de cada capa, ver [10.3 Herramientas de Seguridad](#103-herramientas-de-seguridad).
+
+### 7.5 De la detección a la mitigación: el ciclo de remediación
+
+Detectar una vulnerabilidad no reduce el riesgo; cerrarla sí. El valor de un programa de seguridad está en **qué tan rápido se cierra el ciclo completo**, porque ese tiempo es exactamente la ventana en la que el proyecto queda expuesto a un riesgo ya conocido.
+
+```mermaid
+graph LR
+    A[Detectar] --> B[Priorizar]
+    B --> C[Remediar]
+    C --> D[Verificar]
+    D --> A
+```
+
+| Etapa         | Qué significa                                                                                  | Antipatrón frecuente                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Detectar**  | El escaneo corre de forma **continua** sobre el código y los repositorios, no solo una vez     | Escanear únicamente antes de un release o de una auditoría                     |
+| **Priorizar** | Cada hallazgo se evalúa por severidad **y por el riesgo real** que representa para el proyecto | Tratar todos los CRITICAL por igual, sin considerar exposición ni reachability |
+| **Remediar**  | Se corrige la **causa raíz** del hallazgo, no solo el síntoma que hace fallar el escaneo       | Suprimir la alerta, añadir un `// nosec` o subir el umbral del quality gate    |
+| **Verificar** | Se confirma que la vulnerabilidad quedó cerrada **y se documenta** para no repetir el patrón   | Cerrar el ticket sin re-escanear ni registrar la lección aprendida             |
+
+**Insumos para priorizar** (ninguno basta por sí solo):
+
+```text
+Prioridad = f(Severidad CVSS, Probabilidad EPSS, Reachability, Exposición del sistema, Impacto de negocio)
+```
+
+Ver [5.3 CVSS](#53-cvss-common-vulnerability-scoring-system), [5.3.3 EPSS](#533-epss--exploit-prediction-scoring-system) y [5.6 Reachability Analysis](#56-reachability-analysis).
+
+**Métricas del ciclo**:
+
+- **MTTD** (Mean Time To Detect): desde que la vulnerabilidad entra al código hasta que se detecta
+- **MTTR** (Mean Time To Remediate): desde la detección hasta la corrección verificada
+- **Backlog de seguridad**: hallazgos abiertos por severidad y su antigüedad
+
+> **Mientras más rápido se cierra este ciclo, menor es el tiempo en que un proyecto queda expuesto a un riesgo conocido.** Un hallazgo detectado en el pull request y corregido en el mismo día tiene un costo de remediación órdenes de magnitud menor que el mismo hallazgo descubierto en producción.
+
+### 7.6 Buenas prácticas por etapa del desarrollo
+
+Cómo se aplica todo lo anterior en el día a día, en el momento en que cada decisión se toma:
+
+#### En el diseño
+
+Preguntarse **"¿qué pasa si este dato viene manipulado?"** antes de definir un endpoint o una consulta. El riesgo más caro de corregir es el que nace en el diseño (ver [A06:2025 Insecure Design](#a062025--insecure-design)).
+
+#### En control de acceso
+
+Nunca confiar en un identificador enviado por el cliente sin validar que **pertenece al usuario autenticado**.
+
+```javascript
+// ❌ Malo: confía en el ID que envía el cliente (IDOR — CWE-639)
+app.get("/orders/:orderId", auth, async (req, res) => {
+	const order = await Order.findById(req.params.orderId);
+	res.json(order);
+});
+
+// ✅ Bueno: la consulta acota por el usuario autenticado
+app.get("/orders/:orderId", auth, async (req, res) => {
+	const order = await Order.findOne({
+		_id: req.params.orderId,
+		userId: req.user.id, // ← el servidor decide, no el cliente
+	});
+	if (!order) return res.status(404).json({ error: "Not found" });
+	res.json(order);
+});
+```
+
+#### En consultas a datos
+
+Usar **siempre** parámetros preparados. La validación de entrada es una **capa extra**, no la única defensa: un validador puede tener un bypass, un statement parametrizado no concatena datos con código.
+
+#### En dependencias
+
+Revisar versiones al agregar una librería nueva y **no acumular actualizaciones de seguridad pendientes**. El costo de actualizar crece de forma no lineal con el tiempo acumulado; un backlog de parches es deuda de seguridad con interés compuesto.
+
+#### Al leer un hallazgo de escaneo
+
+Ubicar primero su **CWE** y su **categoría OWASP** antes de remediar, para corregir el patrón y no solo el síntoma (ver [5.2.1 Relación entre OWASP, CWE y el código](#521-relación-entre-owasp-cwe-y-el-código)).
 
 ---
 
@@ -1075,25 +1241,25 @@ La gestión de secretos va más allá de simples claves API. Incluye la protecci
 **Definición**: Cualquier información que pueda identificar a una persona específica.
 
 - **Identificadores directos**:
-  - Números de documento (cédula, pasaporte, SSN)
-  - Números de teléfono
-  - Direcciones de email personales
-  - Direcciones físicas completas
-  - Nombres completos
+    - Números de documento (cédula, pasaporte, SSN)
+    - Números de teléfono
+    - Direcciones de email personales
+    - Direcciones físicas completas
+    - Nombres completos
 
 - **Identificadores indirectos** (que combinados pueden identificar):
-  - Fechas de nacimiento
-  - Códigos postales
-  - Información demográfica
-  - Datos de geolocalización
-  - Direcciones IP
+    - Fechas de nacimiento
+    - Códigos postales
+    - Información demográfica
+    - Datos de geolocalización
+    - Direcciones IP
 
 - **Datos sensibles especiales**:
-  - Información médica (historia clínica, diagnósticos)
-  - Datos biométricos (huellas, reconocimiento facial)
-  - Información financiera (números de tarjeta, cuentas bancarias)
-  - Orientación sexual, religión, afiliación política
-  - Datos de menores de edad
+    - Información médica (historia clínica, diagnósticos)
+    - Datos biométricos (huellas, reconocimiento facial)
+    - Información financiera (números de tarjeta, cuentas bancarias)
+    - Orientación sexual, religión, afiliación política
+    - Datos de menores de edad
 
 #### Información Empresarial Confidencial
 
@@ -1164,59 +1330,95 @@ Los frameworks de compliance y estándares de seguridad proporcionan estructuras
 
 ### 9.1 OWASP (Open Web Application Security Project)
 
-#### OWASP Top 10 (2021) - Resumen de Vulnerabilidades Críticas
+#### OWASP Top 10 (2025) - Resumen de Riesgos Críticos
 
-El OWASP Top 10 representa los riesgos más críticos para aplicaciones web, basado en análisis de más de 500,000 aplicaciones.
+El OWASP Top 10 lista las categorías de riesgo más críticas y frecuentes en aplicaciones web, con datos reales de cientos de organizaciones. Es el **lenguaje común** para hablar de riesgo a nivel conceptual; el detalle técnico de cada hallazgo vive en el [CWE correspondiente](#521-relación-entre-owasp-cwe-y-el-código).
 
-##### A01:2021 – Broken Access Control
+**Edición vigente**: 2025 — la octava versión de la lista. Se construyó a partir del análisis de más de 175,000 registros CVE, encuestas a profesionales de miles de organizaciones y aportes de proveedores de seguridad, programas de bug bounty y la comunidad.
 
-**Problema**: Fallas que permiten actuar fuera de permisos previstos  
-**Prevención**: Deny by default, validar permisos por request, JWT con scopes, controles a nivel de dominio
+**Fuente oficial**: [owasp.org/Top10/2025](https://owasp.org/Top10/2025/)
 
-##### A02:2021 – Cryptographic Failures
+##### Cambios frente a la edición 2021
 
-**Problema**: Fallas criptográficas que exponen datos sensibles  
-**Prevención**: Cifrado fuerte, TLS para transmisión, gestión segura de claves, validar certificados
+| Cambio                    | Detalle                                                                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **2 categorías nuevas**   | `A03 – Software Supply Chain Failures` y `A10 – Mishandling of Exceptional Conditions`                                                                                       |
+| **SSRF absorbido**        | `A10:2021 – Server-Side Request Forgery` deja de ser categoría propia y pasa a formar parte de `A01:2025 – Broken Access Control`                                            |
+| **Ascenso más notorio**   | `Security Misconfiguration` sube del puesto 5 al puesto 2                                                                                                                    |
+| **Ampliación de alcance** | `A06:2021 – Vulnerable and Outdated Components` se amplía a `A03:2025 – Software Supply Chain Failures`, cubriendo todo el ecosistema de dependencias, builds y distribución |
+| **Renombres**             | `Identification and Authentication Failures` → `Authentication Failures`; `Security Logging and Monitoring Failures` → `Logging & Alerting Failures`                         |
 
-##### A03:2021 – Injection
+##### A01:2025 – Broken Access Control
 
-**Problema**: Datos no confiables ejecutados como comandos o consultas  
-**Prevención**: Prepared statements, validación de entrada, escapar datos, principio de menor privilegio
+**Problema**: El sistema no verifica bien qué puede hacer o ver cada usuario. Incluye IDOR (referencias directas a objetos sin validar propiedad) y, desde esta edición, también las fallas de **SSRF**.  
+**CWEs representativos**: CWE-639 (IDOR), CWE-284, CWE-918 (SSRF)  
+**Prevención**: Deny by default, validar permisos en **cada** request del lado del servidor, nunca confiar en identificadores enviados por el cliente, JWT con scopes, controles a nivel de dominio. Para SSRF: validar URLs, lista blanca de destinos, segmentación de red.
 
-##### A04:2021 – Insecure Design
+##### A02:2025 – Security Misconfiguration
 
-**Problema**: Debilidades de diseño arquitectónico fundamentales  
-**Prevención**: Modelado de amenazas, patrones seguros, arquitectura con responsabilidades claras
+**Problema**: Permisos abiertos, configuraciones por defecto y servicios expuestos de más, en cualquier nivel del stack. Su ascenso del puesto 5 al 2 refleja que el despliegue continuo sin escaneo continuo abre ventanas de exposición activas.  
+**Prevención**: Hardening, configuración segura por defecto ([3.3 Fail-Safe Defaults](#33-fail-safe-defaults-valores-por-defecto-seguros)), automatización de la configuración (IaC versionada y escaneada), eliminar servicios y features no usados.
 
-##### A05:2021 – Security Misconfiguration
+##### A03:2025 – Software Supply Chain Failures
 
-**Problema**: Configuraciones inseguras en cualquier nivel del stack  
-**Prevención**: Hardening, configuración segura por defecto, automatización, principios mínimos
+**Problema**: Categoría **nueva**. Amplía lo que antes eran "componentes desactualizados" a **todo el ecosistema**: dependencias directas y transitivas, el proceso de build, los artefactos y su distribución. Cubre desde una librería sin mantenimiento hasta un wrapper de build sin checksum o un pipeline comprometido.  
+**CWEs representativos**: CWE-1104 (Use of Unmaintained Third Party Components), CWE-937, CWE-829 (Inclusion of Functionality from Untrusted Control Sphere)  
+**Prevención**: SCA sobre manifiestos **y lockfiles** ([7.4](#74-dónde-comprobamos-riesgos-capas-de-escaneo)), pinning y lock files ([sección 6](#6-gestión-de-dependencias)), verificación de checksums e integridad de wrappers de build, SBOM (CycloneDX/Syft), firma de artefactos (Cosign/Sigstore) y niveles SLSA.
 
-##### A06:2021 – Vulnerable and Outdated Components
+##### A04:2025 – Cryptographic Failures
 
-**Problema**: Uso de componentes con vulnerabilidades conocidas  
-**Prevención**: Ver [sección 6 Gestión de Dependencias](#6-gestión-de-dependencias) para SCA, pinning y auditoría
+**Problema**: Datos sensibles expuestos por cifrado débil, ausente o mal configurado.  
+**CWEs representativos**: CWE-327 (algoritmo criptográfico roto o riesgoso), CWE-326 (fuerza de cifrado inadecuada)  
+**Prevención**: Cifrado fuerte y algoritmos vigentes, TLS para transmisión, **rechazar explícitamente** cifradores obsoletos en los endpoints, gestión segura de claves ([sección 8](#8-gestión-de-secretos-e-información-sensible)), validar certificados.
 
-##### A07:2021 – Identification and Authentication Failures
+##### A05:2025 – Injection
 
-**Problema**: Fallas en confirmación de identidad y gestión de sesiones  
-**Prevención**: MFA, contraseñas fuertes, gestión segura de sesiones, rate limiting
+**Problema**: Datos no confiables que se ejecutan como código o consulta: SQL, NoSQL, comandos del SO, LDAP, expresiones. Incluye XSS.  
+**CWEs representativos**: CWE-89 (SQL Injection), CWE-79 (XSS), CWE-78 (OS Command Injection)  
+**Prevención**: Parámetros preparados **siempre** ([7.6](#en-consultas-a-datos)), validación de entrada como capa adicional, escapar según el contexto de salida, principio de menor privilegio en la base de datos.
 
-##### A08:2021 – Software and Data Integrity Failures
+##### A06:2025 – Insecure Design
 
-**Problema**: Código e infraestructura sin protección contra violaciones de integridad  
-**Prevención**: Firmas digitales, CI/CD seguro, dependencias de fuentes confiables
+**Problema**: El riesgo nace en el **diseño**, antes de escribir una línea de código. Ninguna implementación correcta salva un diseño inseguro.  
+**Prevención**: Modelado de amenazas, patrones de diseño seguros, arquitectura con responsabilidades de seguridad claras ([3.4 Secure by Design](#34-secure-by-design-seguro-por-diseño)).
 
-##### A09:2021 – Security Logging and Monitoring Failures
+##### A07:2025 – Authentication Failures
 
-**Problema**: Falta de logging, detección y respuesta a brechas  
-**Prevención**: Logging de eventos críticos, monitoreo en tiempo real, alertas automatizadas
+**Problema**: Fallas en sesiones, contraseñas o doble factor. Antes se llamaba _Identification and Authentication Failures_.  
+**Prevención**: MFA, políticas de contraseñas fuertes, gestión segura de sesiones (rotación, expiración, invalidación en logout), rate limiting y bloqueo progresivo ante intentos fallidos.
 
-##### A10:2021 – Server-Side Request Forgery (SSRF)
+##### A08:2025 – Software or Data Integrity Failures
 
-**Problema**: Servidor realiza requests a ubicaciones no previstas  
-**Prevención**: Validar URLs, lista blanca de destinos, segmentación de red
+**Problema**: Se confía en código o pipelines **sin verificar su integridad**: actualizaciones sin firmar, deserialización insegura, plugins de CI/CD de fuentes no verificadas.  
+**Prevención**: Firmas digitales y verificación de las mismas, CI/CD con permisos mínimos y pasos auditados, dependencias solo de fuentes confiables, evitar deserialización de datos no confiables.
+
+##### A09:2025 – Logging & Alerting Failures
+
+**Problema**: No solo falta registro: también faltan **alertas efectivas** que activen una respuesta a tiempo. Un log que nadie lee no detecta una brecha.  
+**Prevención**: Logging de eventos críticos de seguridad ([7.3](#73-logging-y-monitoring-seguros)), monitoreo en tiempo real, alertas accionables con destinatario y umbral definidos, y runbooks de respuesta asociados a cada alerta.
+
+##### A10:2025 – Mishandling of Exceptional Conditions
+
+**Problema**: Categoría **nueva**. Manejo indebido de errores, fallas lógicas y sistemas que **fallan abiertos** (`fail-open`) ante condiciones anómalas: un `catch` vacío que deja pasar la petición, un timeout del servicio de autorización que concede acceso por defecto, mensajes de error que filtran detalles internos.  
+**Prevención**: Diseñar para **fail-closed** ([3.3 Fail-Safe Defaults](#33-fail-safe-defaults-valores-por-defecto-seguros)), manejo explícito de errores en cada camino, mensajes genéricos hacia el cliente y detalle solo en logs internos, pruebas de los caminos de excepción y no únicamente del happy path.
+
+##### Referencia histórica: OWASP Top 10 (2021)
+
+Muchos reportes de escaneo y auditorías previas todavía referencian la edición 2021. Equivalencias:
+
+| 2021                                             | 2025                                                    |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| A01 – Broken Access Control                      | A01 – Broken Access Control                             |
+| A02 – Cryptographic Failures                     | A04 – Cryptographic Failures                            |
+| A03 – Injection                                  | A05 – Injection                                         |
+| A04 – Insecure Design                            | A06 – Insecure Design                                   |
+| A05 – Security Misconfiguration                  | A02 – Security Misconfiguration                         |
+| A06 – Vulnerable and Outdated Components         | A03 – Software Supply Chain Failures (alcance ampliado) |
+| A07 – Identification and Authentication Failures | A07 – Authentication Failures                           |
+| A08 – Software and Data Integrity Failures       | A08 – Software or Data Integrity Failures               |
+| A09 – Security Logging and Monitoring Failures   | A09 – Logging & Alerting Failures                       |
+| A10 – Server-Side Request Forgery (SSRF)         | Absorbido en A01 – Broken Access Control                |
+| —                                                | A10 – Mishandling of Exceptional Conditions (nueva)     |
 
 ### 9.2 Frameworks de Compliance Internacional
 
@@ -1334,38 +1536,39 @@ A.18 Cumplimiento
 #### Organizaciones de Referencia
 
 - **MITRE Corporation**: [mitre.org](https://www.mitre.org/)
-  - CVE Program: [cve.mitre.org](https://cve.mitre.org/)
-  - CWE Database: [cwe.mitre.org](https://cwe.mitre.org/)
-  - CAPEC: [capec.mitre.org](https://capec.mitre.org/) (Common Attack Pattern Enumeration and Classification)
+    - CVE Program: [cve.mitre.org](https://cve.mitre.org/)
+    - CWE Database: [cwe.mitre.org](https://cwe.mitre.org/)
+    - CAPEC: [capec.mitre.org](https://capec.mitre.org/) (Common Attack Pattern Enumeration and Classification)
 
 - **NIST (National Institute of Standards and Technology)**: [nist.gov](https://www.nist.gov/)
-  - National Vulnerability Database: [nvd.nist.gov](https://nvd.nist.gov/)
-  - Cybersecurity Framework: [nist.gov/cybersecurity](https://www.nist.gov/cybersecurity)
-  - Special Publications: [csrc.nist.gov](https://csrc.nist.gov/)
+    - National Vulnerability Database: [nvd.nist.gov](https://nvd.nist.gov/)
+    - Cybersecurity Framework: [nist.gov/cybersecurity](https://www.nist.gov/cybersecurity)
+    - Special Publications: [csrc.nist.gov](https://csrc.nist.gov/)
 
 - **FIRST (Forum of Incident Response and Security Teams)**: [first.org](https://www.first.org/)
-  - CVSS Specifications: [first.org/cvss](https://www.first.org/cvss/)
-  - EPSS: [first.org/epss](https://www.first.org/epss/) (Exploit Prediction Scoring System)
+    - CVSS Specifications: [first.org/cvss](https://www.first.org/cvss/)
+    - EPSS: [first.org/epss](https://www.first.org/epss/) (Exploit Prediction Scoring System)
 
 #### Bases de Datos de Vulnerabilidades Recomendadas
 
 - **Oficiales**:
-  - NVD (NIST): [nvd.nist.gov](https://nvd.nist.gov/)
-  - CVE Details: [cvedetails.com](https://www.cvedetails.com/)
-  - MITRE CVE: [cve.mitre.org](https://cve.mitre.org/)
+    - NVD (NIST): [nvd.nist.gov](https://nvd.nist.gov/)
+    - CVE Details: [cvedetails.com](https://www.cvedetails.com/)
+    - MITRE CVE: [cve.mitre.org](https://cve.mitre.org/)
 
 - **Comerciales y Comunitarias**:
-  - Vulners: [vulners.com](https://vulners.com/)
-  - VulnDB: [vulndb.cyberriskanalytics.com](https://vulndb.cyberriskanalytics.com/)
-  - Exploit Database: [exploit-db.com](https://www.exploit-db.com/)
-  - Packet Storm: [packetstormsecurity.com](https://packetstormsecurity.com/)
+    - Vulners: [vulners.com](https://vulners.com/)
+    - VulnDB: [vulndb.cyberriskanalytics.com](https://vulndb.cyberriskanalytics.com/)
+    - Exploit Database: [exploit-db.com](https://www.exploit-db.com/)
+    - Packet Storm: [packetstormsecurity.com](https://packetstormsecurity.com/)
 
 ### 10.2 Organizaciones y Frameworks de Seguridad
 
 #### OWASP (Open Web Application Security Project)
 
 - **Sitio principal**: [owasp.org](https://owasp.org/)
-- **OWASP Top 10**: [owasp.org/Top10](https://owasp.org/Top10/)
+- **OWASP Top 10 (2025, edición vigente)**: [owasp.org/Top10/2025](https://owasp.org/Top10/2025/)
+- **OWASP Top 10 (2021, referencia histórica)**: [owasp.org/Top10/2021](https://owasp.org/Top10/2021/)
 - **Testing Guide**: [owasp.org/www-project-web-security-testing-guide](https://owasp.org/www-project-web-security-testing-guide/)
 - **Cheat Sheet Series**: [cheatsheetseries.owasp.org](https://cheatsheetseries.owasp.org/)
 - **ASVS**: [owasp.org/www-project-application-security-verification-standard](https://owasp.org/www-project-application-security-verification-standard/)
@@ -1373,16 +1576,16 @@ A.18 Cumplimiento
 #### Estándares Internacionales
 
 - **ISO**: [iso.org](https://www.iso.org/)
-  - ISO/IEC 27001: [iso.org/isoiec-27001-information-security.html](https://www.iso.org/isoiec-27001-information-security.html)
-  - ISO/IEC 27002: [iso.org/standard/75652.html](https://www.iso.org/standard/75652.html)
+    - ISO/IEC 27001: [iso.org/isoiec-27001-information-security.html](https://www.iso.org/isoiec-27001-information-security.html)
+    - ISO/IEC 27002: [iso.org/standard/75652.html](https://www.iso.org/standard/75652.html)
 
 - **NIST Frameworks**:
-  - Cybersecurity Framework: [nist.gov/cyberframework](https://www.nist.gov/cyberframework)
-  - SP 800-53 (Security Controls): [csrc.nist.gov/publications/detail/sp/800-53/rev-5/final](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final)
-  - SP 800-61 (Incident Response): [csrc.nist.gov/publications/detail/sp/800-61/rev-2/final](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final)
-  - SP 800-207 (Zero Trust Architecture): [csrc.nist.gov/publications/detail/sp/800-207/final](https://csrc.nist.gov/publications/detail/sp/800-207/final)
-  - SP 800-207A (Zero Trust Access Model): [csrc.nist.gov/publications/detail/sp/800-207/a/final](https://csrc.nist.gov/publications/detail/sp/800-207/a/final)
-  - CSWP 20 (Planning for Zero Trust): [csrc.nist.gov/publications/detail/cswp/20/planning-for-a-zero-trust-architecture/final](https://csrc.nist.gov/publications/detail/cswp/20/planning-for-a-zero-trust-architecture/final)
+    - Cybersecurity Framework: [nist.gov/cyberframework](https://www.nist.gov/cyberframework)
+    - SP 800-53 (Security Controls): [csrc.nist.gov/publications/detail/sp/800-53/rev-5/final](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final)
+    - SP 800-61 (Incident Response): [csrc.nist.gov/publications/detail/sp/800-61/rev-2/final](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final)
+    - SP 800-207 (Zero Trust Architecture): [csrc.nist.gov/publications/detail/sp/800-207/final](https://csrc.nist.gov/publications/detail/sp/800-207/final)
+    - SP 800-207A (Zero Trust Access Model): [csrc.nist.gov/publications/detail/sp/800-207/a/final](https://csrc.nist.gov/publications/detail/sp/800-207/a/final)
+    - CSWP 20 (Planning for Zero Trust): [csrc.nist.gov/publications/detail/cswp/20/planning-for-a-zero-trust-architecture/final](https://csrc.nist.gov/publications/detail/cswp/20/planning-for-a-zero-trust-architecture/final)
 
 #### Frameworks de Compliance
 
@@ -1394,19 +1597,19 @@ A.18 Cumplimiento
 #### Zero Trust Resources
 
 - **NIST**:
-  - SP 800-207 (Zero Trust Architecture): [csrc.nist.gov/publications/detail/sp/800-207/final](https://csrc.nist.gov/publications/detail/sp/800-207/final)
-  - SP 800-207A (Zero Trust Access Model): [csrc.nist.gov/pubs/sp/800/207/a/final](https://csrc.nist.gov/pubs/sp/800/207/a/final)
-  - CSWP 20 (Planning for ZTA): [csrc.nist.gov/pubs/cswp/20/planning-for-a-zero-trust-architecture/final](https://csrc.nist.gov/pubs/cswp/20/planning-for-a-zero-trust-architecture/final)
+    - SP 800-207 (Zero Trust Architecture): [csrc.nist.gov/publications/detail/sp/800-207/final](https://csrc.nist.gov/publications/detail/sp/800-207/final)
+    - SP 800-207A (Zero Trust Access Model): [csrc.nist.gov/pubs/sp/800/207/a/final](https://csrc.nist.gov/pubs/sp/800/207/a/final)
+    - CSWP 20 (Planning for ZTA): [csrc.nist.gov/pubs/cswp/20/planning-for-a-zero-trust-architecture/final](https://csrc.nist.gov/pubs/cswp/20/planning-for-a-zero-trust-architecture/final)
 
 - **CISA (Cybersecurity and Infrastructure Security Agency)**:
-  - Zero Trust Maturity Model: [cisa.gov/zero-trust-maturity-model](https://www.cisa.gov/zero-trust-maturity-model)
-  - Zero Trust Resources: [cisa.gov/zero-trust](https://www.cisa.gov/zero-trust)
+    - Zero Trust Maturity Model: [cisa.gov/zero-trust-maturity-model](https://www.cisa.gov/zero-trust-maturity-model)
+    - Zero Trust Resources: [cisa.gov/zero-trust](https://www.cisa.gov/zero-trust)
 
 - **NSA (National Security Agency)**:
-  - Embracing a Zero Trust Security Model: [nsa.gov/Press-Room/News-Highlights/Article/Article/2791320](https://www.nsa.gov/Press-Room/News-Highlights/Article/Article/2791320/)
+    - Embracing a Zero Trust Security Model: [nsa.gov/Press-Room/News-Highlights/Article/Article/2791320](https://www.nsa.gov/Press-Room/News-Highlights/Article/Article/2791320/)
 
 - **DoD (Department of Defense)**:
-  - DoD Zero Trust Reference Architecture: [dodcio.defense.gov/Library/DoD-Zero-Trust-Reference-Architecture](https://dodcio.defense.gov/Library/DoD-Zero-Trust-Reference-Architecture/)
+    - DoD Zero Trust Reference Architecture: [dodcio.defense.gov/Library/DoD-Zero-Trust-Reference-Architecture](https://dodcio.defense.gov/Library/DoD-Zero-Trust-Reference-Architecture/)
 
 ### 10.3 Herramientas de Seguridad
 
